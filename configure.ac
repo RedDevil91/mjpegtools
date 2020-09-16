@@ -348,14 +348,14 @@ case $host_cpu in
     AC_MSG_RESULT(IA32)
     AC_DEFINE(HAVE_X86CPU,1, [Compiling for x86 architecture CPU])
     have_x86cpu=true
-    PROGRAM_NOPIC="-fno-PIC"
+    PROGRAM_NOPIC="-fPIC"
     ;;
   x86_64*)
     AC_MSG_RESULT(x86_64)
     AC_DEFINE(HAVE_X86CPU,1, [Compiling for x86-64 architecture CPU])
     have_x86cpu=true
     have_x86_64cpu=true
-    PROGRAM_NOPIC="-fno-PIC"
+    PROGRAM_NOPIC="-fPIC"
     ;;
   powerpc | powerpc64)
     AC_MSG_RESULT(PowerPC)
