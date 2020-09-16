@@ -35,10 +35,10 @@
 #define HAVE_LIBM 1
 
 /* libquicktime > 0.9.7 present */
-#define HAVE_LIBQUICKTIME 1
+/* #undef HAVE_LIBQUICKTIME */
 
 /* libxf86dga is present */
-#define HAVE_LIBXXF86DGA 1
+/* #undef HAVE_LIBXXF86DGA */
 
 /* Define to 1 if you have the `lround' function. */
 #define HAVE_LROUND 1
@@ -65,10 +65,10 @@
 #define HAVE_PTHREADSTACKSIZE 1
 
 /* libsdl > 1.1.3 present */
-#define HAVE_SDL 1
+/* #undef HAVE_SDL */
 
 /* SDL_gfx library present */
-#define HAVE_SDLgfx 1
+/* #undef HAVE_SDLgfx */
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
@@ -185,7 +185,7 @@
 #endif
 
 /* Define to 1 if the X Window System is missing or not being used. */
-/* #undef X_DISPLAY_MISSING */
+#define X_DISPLAY_MISSING 1
 
 /* Enable large inode numbers on Mac OS X 10.5.  */
 #ifndef _DARWIN_USE_64_BIT_INODE

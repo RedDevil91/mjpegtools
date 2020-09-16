@@ -1,5 +1,5 @@
 %define name    mjpegtools
-%define version 2.0.1RC1
+%define version 2.0.1
 %define release 1
 
 %define infoentry "* mjpeg-howto: (mjpeg-howto).        How to use the mjpeg tools"
@@ -122,11 +122,11 @@ of the mjpegtools package.
 %{_libdir}/*.so
 
 %changelog
-* Sat Nov 04 2012 Bernhard Praschinger <shadowlord@utanet.at>
+* Sat Nov 2012 Bernhard Praschinger <shadowlord@utanet.at>
   This release has no major change, but a lot of bugfixes. 
   And some small enhancements 
 
-* Sat May 21 2011 Bernhard Praschinger <shadowlord@utanet.at>
+* Sat Mai 21 2011 Bernhard Praschinger <shadowlord@utanet.at>
   This is it, after more than 10 years on Sourcefogre we named this 
   release 2.0.0. For further changes and fixes please take a look at the
   Changelog. 
