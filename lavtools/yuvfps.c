@@ -1,6 +1,6 @@
 /*
   *  yuvfps.c
-  *  Copyright (C) 2002 Alfonso Garcia-Patiño Barbolani <barbolani@jazzfree.com>
+  *  Copyright (C) 2002 Alfonso Garcia-Patiï¿½o Barbolani <barbolani@jazzfree.com>
   *
   *  Weighted average resampling
   *  Copyright (C) 2006 Johannes Lehtinen <johannes.lehtinen@iki.fi>

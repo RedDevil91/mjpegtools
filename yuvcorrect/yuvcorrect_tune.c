@@ -191,7 +191,7 @@ yuvcorrect_tune_handle_args (int argc, char *argv[], overall_t *overall, general
   int c;
   int k_mode;
 
-   // Ne pas oublier de mettre la putain de ligne qui suit, sinon, plus d'argument à la lign de commande, ils auront été bouffés par l'appel précédnt à getopt!!
+   // Ne pas oublier de mettre la putain de ligne qui suit, sinon, plus d'argument ï¿½ la lign de commande, ils auront ï¿½tï¿½ bouffï¿½s par l'appel prï¿½cï¿½dnt ï¿½ getopt!!
    optind=1;
    while ((c = getopt (argc, argv, legal_opt_flags)) != -1)
     {

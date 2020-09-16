@@ -181,7 +181,7 @@ cubic_scale (uint8_t * padded_input, uint8_t * output,
 		     line = line_0 + *(in_col_p++);
 		     switch(width_neighbors)
 		       {
-			  // NB : c'est l'opération movq_r2m qui coute le plus en temps, seulement pour la première !!!
+			  // NB : c'est l'opï¿½ration movq_r2m qui coute le plus en temps, seulement pour la premiï¿½re !!!
 			case 4:
 			  movq_m2r(*cspline_wp,mm0);
 			  movq_m2r(*(line),mm6);     punpcklbw_r2r(mm7,mm6);

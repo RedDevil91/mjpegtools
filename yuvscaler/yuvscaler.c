@@ -1487,7 +1487,7 @@ main (int argc, char *argv[])
        // Please note that a and b are inside range [0,1[. 
        // 
        // For upscaling along w (resp. h), we need to take into account the 4 nearest neighbors along w (resp. h) of the base input pixel.
-       // For downscaling along w (resp. h), we need to take into account AT LEAST 6 nearest neighbors of the base input pîxel. 
+       // For downscaling along w (resp. h), we need to take into account AT LEAST 6 nearest neighbors of the base input pï¿½xel. 
        // And the real number of neighbors pixel from the base input pixel to be taken into account depends on the scaling ratios. 
        // We have to take into account "width_neighbors" neighbors on the width and "height_neighbors" on the height; 
        // with width_neighbors = 2*nearest_higher_integer(2/width_scale),  or 4 if upscaling (output_width_slice>input_width_slice)
@@ -1595,8 +1595,8 @@ main (int argc, char *argv[])
 #endif
 
 
-// Il faudrait peut-être aligner correctement tous ces pointeurs, en particulier cspline_w_neighbors et cspline_h_neighbors
-// qui sont amplement utilisés dans les routines de scaling => il faut aussi aligner cspline_w et cspline_h
+// Il faudrait peut-ï¿½tre aligner correctement tous ces pointeurs, en particulier cspline_w_neighbors et cspline_h_neighbors
+// qui sont amplement utilisï¿½s dans les routines de scaling => il faut aussi aligner cspline_w et cspline_h
       if (
 	  !(cspline_w =            (int16_t *) malloc ( width_neighbors  * output_active_width  * sizeof (int16_t))) ||
 	  !(cspline_h =            (int16_t *) malloc ( height_neighbors * output_active_height * sizeof (int16_t))) ||

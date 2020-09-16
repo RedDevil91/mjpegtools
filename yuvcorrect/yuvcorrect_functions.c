@@ -61,7 +61,7 @@ handle_args_yuv_rgb (int argc, char *argv[], yuv_correction_t * yuv_correct, rgb
   int k_yuv, k_rgb;
   float f1, f2, f3;
 
-  // Ne pas oublier de mettre la putain de ligne qui suit, sinon, plus d'argument à la ligne de commande, ils auront été bouffés par l'appel précédent à getopt!!
+  // Ne pas oublier de mettre la putain de ligne qui suit, sinon, plus d'argument ï¿½ la ligne de commande, ils auront ï¿½tï¿½ bouffï¿½s par l'appel prï¿½cï¿½dent ï¿½ getopt!!
   optind = 1;
   while ((c = getopt (argc, argv, legal_opt_flags)) != -1)
     {
@@ -477,7 +477,7 @@ void initialisation2(yuv_correction_t * yuv_correct, rgb_correction_t * rgb_corr
       rgb_correct->new_green = u_c_p;
       u_c_p += (256 + (OFFSET<<1));
       rgb_correct->new_blue = u_c_p;
-      // Accélération
+      // Accï¿½lï¿½ration
       if (!
 	  (u_c_p =
 	   (uint8_t *) malloc (3 * 256 * sizeof (uint8_t) + ALIGNEMENT)))
