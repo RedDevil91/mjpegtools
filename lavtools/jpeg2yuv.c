@@ -226,6 +226,8 @@ static void parse_commandline(int argc, char ** argv, parameters_t *param)
     }
   }
 
+  param->numframes = 1;
+
   if (param->jpegformatstr == NULL)
       mjpeg_info("Reading jpeg filenames from stdin.");
 
@@ -247,11 +249,12 @@ static void parse_commandline(int argc, char ** argv, parameters_t *param)
  * remember first filename for later
  * @returns 0 on success
  */
-static int init_parse_files(parameters_t *param, char *jpegname)
+static int init_parse_files(parameters_t *param, char *jpegname, FILE *jpegfile)
 { 
-  FILE *jpegfile;
+  mjpeg_info("Parsing & checking input files.");
+  //FILE *jpegfile;
 
-  if (param->jpegformatstr) {
+  /*if (param->jpegformatstr) {
        snprintf(jpegname, FILENAME_MAX, param->jpegformatstr, param->begin);
        jpegfile = fopen(jpegname, "rb");
   }
@@ -266,7 +269,9 @@ static int init_parse_files(parameters_t *param, char *jpegname)
        else {
            jpegfile = NULL;
        }
-  }
+  }*/
+  //jpegfile = stdin;
+
   mjpeg_debug("Analyzing %s to get the right pic params", jpegname);
   
   if (jpegfile == NULL)
@@ -318,7 +323,6 @@ static int init_parse_files(parameters_t *param, char *jpegname)
   param->colorspace = dinfo.jpeg_color_space;
   
   jpeg_destroy_decompress(&dinfo);
-  fclose(jpegfile);
 
   mjpeg_info("Movie frame rate is:  %f frames/second",
 	     Y4M_RATIO_DBL(param->framerate));
@@ -402,18 +406,18 @@ static ssize_t read_jpeg_data(uint8_t *jpegdata, char *jpegname, char *prev_jpeg
   return jpegsize;
 }
 
-static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg)
+static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg, uint8_t* jpegdata, ssize_t jpegsize)
 {
   uint32_t frame;
-  ssize_t jpegsize;
+  //ssize_t jpegsize;
   char jpegname[FILENAME_MAX];
   char prev_jpegname[FILENAME_MAX];
   int loops;                                 /* number of loops to go */
   uint8_t *yuv[3];  /* buffer for Y/U/V planes of decoded JPEG */
-  static uint8_t jpegdata[MAXPIXELS];  /* that ought to be enough */
+  //static uint8_t jpegdata[MAXPIXELS];  /* that ought to be enough */
   y4m_stream_info_t streaminfo;
   y4m_frame_info_t frameinfo;
-  jpegsize = 0;
+  //jpegsize = 0;
   loops = param->loop;
 
   mjpeg_info("Number of Loops %i", loops);
@@ -442,7 +446,7 @@ static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg)
           (frame < param->numframes + param->begin) || (param->numframes == -1);
           frame++) {
    
-       if (param->jpegformatstr) {
+       /*if (param->jpegformatstr) {
            snprintf(jpegname, sizeof(jpegname), param->jpegformatstr, frame);
 	 jpegsize = read_jpeg_data(jpegdata, jpegname, prev_jpegname);
        }
@@ -464,10 +468,11 @@ static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg)
            else {
              jpegsize = -1;
            }
-       }
+       }*/
        
       mjpeg_debug("Numframes %i  jpegsize %d", param->numframes, (int)jpegsize);
        if (jpegsize <= 0) {
+         mjpeg_info("jpeg size %d...", jpegsize);
          mjpeg_debug("in jpegsize <= 0"); 
          if (param->numframes == -1)
             {
@@ -575,23 +580,40 @@ static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg)
  */
 int main(int argc, char ** argv)
 { 
+  FILE* image_in;
+  static uint8_t jpegdata[MAXPIXELS];
+  ssize_t jpegsize;
+
+  image_in = tmpfile();
+  jpegsize = fread(jpegdata, sizeof(unsigned char), MAXPIXELS, stdin);
+  mjpeg_info("File size: %d", jpegsize);
+  if (jpegsize > 0) {
+      fwrite(jpegdata, sizeof(unsigned char), sizeof(jpegdata), image_in);
+      fseek(image_in, 0, SEEK_SET);
+  }
+  else {
+      mjpeg_error_exit1("Error reading from stdin...");
+  }
+
   parameters_t param;
   char first_jpegname[FILENAME_MAX];
 
-  *first_jpegname = '\0';
+  //*first_jpegname = '\0';
+  strcpy(first_jpegname, "MISSING_FILENAME");
 
   parse_commandline(argc, argv, &param);
   mjpeg_default_handler_verbosity(param.verbose);
 
-  mjpeg_info("Parsing & checking input files.");
-  if (init_parse_files(&param, first_jpegname)) {
+  if (init_parse_files(&param, first_jpegname, image_in)) {
     mjpeg_error_exit1("* Error processing the JPEG input.");
   }
+  fclose(image_in);
 
-  if (generate_YUV4MPEG(&param, first_jpegname)) { 
+  if (generate_YUV4MPEG(&param, first_jpegname, jpegdata, jpegsize)) { 
     mjpeg_error_exit1("* Error processing the input files.");
   }
 
   return 0;
+  // cat image.jpg | ../lavtools/jpeg2yuv -f 25 -I p
 }
 
