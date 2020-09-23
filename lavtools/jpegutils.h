@@ -25,6 +25,8 @@
 #ifndef __JPEGUTILS_H__
 #define __JPEGUTILS_H__
 
+#include <jpeglib.h>
+
  /*
  * jpeg_data:       buffer with input / output jpeg
  * len:             Length of jpeg buffer
@@ -39,6 +41,9 @@
  * width            width of Y channel (width of U/V is width/2)
  * height           height of Y channel (height of U/V is height/2)
  */
+
+void jpeg_buffer_src(j_decompress_ptr cinfo, unsigned char* buffer,
+                     long num);
 
 int decode_jpeg_raw (unsigned char *jpeg_data, int len,
                      int itype, int ctype, int width, int height,

@@ -55,8 +55,6 @@
  */
 
 
-static void jpeg_buffer_src  (j_decompress_ptr cinfo, unsigned char *buffer,
-                       long num);
 static void jpeg_buffer_dest (j_compress_ptr cinfo,   unsigned char *buffer,
                        long len);
 static void jpeg_skip_ff (j_decompress_ptr cinfo);
@@ -132,8 +130,7 @@ static void term_source (j_decompress_ptr cinfo)
  * Prepare for input from a data buffer.
  */
 
-static void
-jpeg_buffer_src (j_decompress_ptr cinfo, unsigned char *buffer, long num)
+void jpeg_buffer_src (j_decompress_ptr cinfo, unsigned char *buffer, long num)
 {
    /* The source object and input buffer are made permanent so that a series
     * of JPEG images can be read from the same buffer by calling jpeg_buffer_src

@@ -248,20 +248,17 @@ static void parse_commandline(int argc, char ** argv, parameters_t *param)
  * remember first filename for later
  * @returns 0 on success
  */
-static int init_parse_files(parameters_t *param, FILE *jpegfile)
+static int init_parse_files(parameters_t *param, uint8_t* jpegdata, ssize_t jpegsize)
 { 
   mjpeg_info("Parsing & checking input files.");
   mjpeg_debug("Analyzing image to get the right pic params");
-  
-  if (jpegfile == NULL)
-    mjpeg_error_exit1("System error while opening: %s", strerror(errno));
 
   /* Now open this JPEG file, and examine its header to retrieve the 
      YUV4MPEG info that shall be written */
   dinfo.err = jpeg_std_error(&jerr);  /* ?????????? */
   jpeg_create_decompress(&dinfo);
-  jpeg_stdio_src(&dinfo, jpegfile);
-  jpeg_read_header(&dinfo, 1);
+  jpeg_buffer_src(&dinfo, jpegdata, jpegsize);
+  jpeg_read_header(&dinfo, TRUE);
   switch (dinfo.jpeg_color_space)
     {
     case JCS_YCbCr:
@@ -386,7 +383,6 @@ static ssize_t read_jpeg_data(uint8_t *jpegdata, char *jpegname, char *prev_jpeg
 
 static int generate_YUV4MPEG(parameters_t *param)
 {
-  FILE* image_in;
   ssize_t jpegsize;
   uint32_t frame;
   int loops;                                 /* number of loops to go */
@@ -397,23 +393,18 @@ static int generate_YUV4MPEG(parameters_t *param)
   jpegsize = 0;
   loops = param->loop;
 
-  image_in = tmpfile();
-
   jpegsize = fread(jpegdata, sizeof(unsigned char), MAXPIXELS, stdin);
   mjpeg_info("File size: %d", jpegsize);
   if (jpegsize > 0) {
-    fwrite(jpegdata, sizeof(unsigned char), sizeof(jpegdata), image_in);
-    fseek(image_in, 0, SEEK_SET);
+    mjpeg_debug("Managed to read image from stdin...");
   }
   else {
     mjpeg_error_exit1("Error reading from stdin...");
   }
 
-  if (init_parse_files(param, image_in)) {
+  if (init_parse_files(param, jpegdata, jpegsize)) {
       mjpeg_error_exit1("* Error processing the JPEG input.");
   }
-
-  fclose(image_in);
 
   mjpeg_info("Number of Loops %i", loops);
   mjpeg_info("Number of Frames %i", param->numframes);
