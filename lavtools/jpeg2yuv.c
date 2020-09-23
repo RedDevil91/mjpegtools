@@ -72,6 +72,11 @@ typedef struct _parameters {
   int rescale_YUV;
 } parameters_t;
 
+typedef struct _read_parameters {
+    ssize_t buff_size;
+    uint8_t *frame_buff;
+} read_parameters_t;
+
 
 static struct jpeg_decompress_struct dinfo;
 static struct jpeg_error_mgr jerr;
@@ -381,6 +386,101 @@ static ssize_t read_jpeg_data(uint8_t *jpegdata, char *jpegname, char *prev_jpeg
   return jpegsize;
 }
 
+
+static ssize_t find_eoi_in_buffer(uint8_t* buffer, ssize_t size) {
+    ssize_t i;
+    for (i = 0; i < size - 1; i++) {
+        if (buffer[i] == 0xFF && buffer[i + 1] == 0xD9) {
+            mjpeg_debug("EOI index: %d", i + 1);
+            return i + 1;
+        }
+    }
+    return -1;
+}
+
+
+static ssize_t read_jpeg_from_stdin(uint8_t* jpegdata, read_parameters_t *read_params) {
+    uint8_t buffer[MAXPIXELS];
+    ssize_t read_size = 0, new_buff_size = 0, eoi_index, image_size;
+
+    if (read_params->buff_size <= 0) {
+        mjpeg_debug("Frame buffer is empty, reading from stdin...");
+        read_size = fread(buffer, sizeof(unsigned char), MAXPIXELS, stdin);
+
+        if (buffer[0] == 0xFF && buffer[1] == 0xD8) {
+            mjpeg_info("SOI found!!!");
+        }
+        else {
+            mjpeg_error_exit1("SOI not found, not JPEG file(?) or copy mistake...");
+        }
+
+        eoi_index = find_eoi_in_buffer(buffer, read_size);
+        if (eoi_index == -1) {
+            mjpeg_error_exit1("Failed to find EOI...");
+        }
+        image_size = eoi_index + 1;
+        new_buff_size = read_size - image_size;
+        mjpeg_debug("Input size: %d", read_size);
+        mjpeg_debug("New buff size: %d", new_buff_size);
+
+        memcpy(jpegdata, buffer, image_size * sizeof(unsigned char));
+
+        memcpy(read_params->frame_buff, &buffer[image_size], new_buff_size * sizeof(unsigned char));
+        read_params->buff_size = new_buff_size;
+        return image_size;
+    }
+    else {
+        mjpeg_debug("Searching EOI in frame buffer...");
+        eoi_index = find_eoi_in_buffer(read_params->frame_buff, read_params->buff_size);
+
+        if (eoi_index == -1) {
+            mjpeg_debug("Reading again from stdin...");
+            read_size = fread(buffer, sizeof(unsigned char), MAXPIXELS, stdin);
+
+            eoi_index = find_eoi_in_buffer(buffer, read_size);
+            if (eoi_index == -1) {
+                mjpeg_error_exit1("Failed to find EOI...");
+            }
+            image_size = eoi_index + 1 + read_params->buff_size;
+            memcpy(jpegdata, read_params->frame_buff, read_params->buff_size * sizeof(unsigned char));
+            memcpy(jpegdata + read_params->buff_size, buffer, (eoi_index + 1) * sizeof(unsigned char));
+
+            new_buff_size = read_size - (eoi_index + 1);
+            memcpy(read_params->frame_buff, &buffer[eoi_index + 1], new_buff_size * sizeof(unsigned char));
+            return image_size;
+        }
+        else {
+            memcpy(jpegdata, read_params->frame_buff, (eoi_index + 1) * sizeof(unsigned char));
+            new_buff_size = read_params->buff_size - (eoi_index + 1);
+            if (new_buff_size != 0) {
+                mjpeg_debug("Should move the remaining part...");
+                memmove(read_params->frame_buff, 
+                            read_params->frame_buff + eoi_index + 1, 
+                                new_buff_size * sizeof(unsigned char));
+            }
+            else {
+                mjpeg_debug("Frame buffer is empty...");
+            }
+            read_params->buff_size = new_buff_size;
+
+            return eoi_index + 1;
+        }
+        return -1;
+    }
+
+    read_size = fread(buffer, sizeof(unsigned char), MAXPIXELS, stdin);
+    mjpeg_debug("Image size %d", read_size);
+
+    eoi_index = find_eoi_in_buffer(buffer, read_size);
+    mjpeg_info("EOI index: %d", eoi_index);
+    if (buffer[eoi_index + 1] == 0xFF && buffer[eoi_index + 2] == 0xD8) {
+        mjpeg_info("SOI again!!!");
+    }
+    memcpy(jpegdata, buffer, (eoi_index + 1) * sizeof(unsigned char));
+
+    return eoi_index + 1;
+}
+
 static int generate_YUV4MPEG(parameters_t *param)
 {
   ssize_t jpegsize;
@@ -388,18 +488,23 @@ static int generate_YUV4MPEG(parameters_t *param)
   int loops;                                 /* number of loops to go */
   uint8_t* yuv[3];  /* buffer for Y/U/V planes of decoded JPEG */
   static uint8_t jpegdata[MAXPIXELS];  /* that ought to be enough */
+  
+  read_parameters_t *read_params = malloc(sizeof(read_parameters_t));
+  read_params->buff_size = -1;
+  read_params->frame_buff = (uint8_t*)malloc(MAXPIXELS * sizeof(uint8_t));
+  
   y4m_stream_info_t streaminfo;
   y4m_frame_info_t frameinfo;
   jpegsize = 0;
   loops = param->loop;
 
-  jpegsize = fread(jpegdata, sizeof(unsigned char), MAXPIXELS, stdin);
-  mjpeg_info("File size: %d", jpegsize);
+  mjpeg_info("Reading first image");
+  jpegsize = read_jpeg_from_stdin(jpegdata, read_params);
   if (jpegsize > 0) {
-    mjpeg_debug("Managed to read image from stdin...");
+      mjpeg_debug("Managed to read image from stdin...");
   }
   else {
-    mjpeg_error_exit1("Error reading from stdin...");
+      mjpeg_error_exit1("Error reading from stdin...");
   }
 
   if (init_parse_files(param, jpegdata, jpegsize)) {
@@ -426,12 +531,18 @@ static int generate_YUV4MPEG(parameters_t *param)
 
   y4m_write_stream_header(STDOUT_FILENO, &streaminfo);
  
+
+  param->numframes = 5;
   do {
      for (frame = param->begin;
           (frame < param->numframes + param->begin) || (param->numframes == -1);
           frame++) {
        
-      mjpeg_debug("Numframes %i  jpegsize %d", param->numframes, (int)jpegsize);
+       if (frame > param->begin) {
+         jpegsize = read_jpeg_from_stdin(jpegdata, read_params);
+       }
+
+       mjpeg_debug("Numframes %i  jpegsize %d", param->numframes, (int)jpegsize);
        if (jpegsize <= 0) {
          mjpeg_info("jpeg size %d...", jpegsize);
          mjpeg_debug("in jpegsize <= 0"); 
@@ -526,6 +637,8 @@ static int generate_YUV4MPEG(parameters_t *param)
   free(yuv[0]);
   free(yuv[1]);
   free(yuv[2]);
+  free(read_params->frame_buff);
+  free(read_params);
 
   return 0;
 }
