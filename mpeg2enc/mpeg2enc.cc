@@ -95,7 +95,7 @@ public:
     FILE_StrmWriter( EncoderParams &encparams, const char *outfilename ) 
         {
             /* open output file */
-            if (!(outfile=fopen(outfilename,"wb")))
+            if (!(outfile=stdout))
             {
                 mjpeg_error_exit1("Couldn't create output file %s",outfilename);
             }

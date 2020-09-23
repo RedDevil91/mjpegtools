@@ -77,7 +77,6 @@ static struct jpeg_decompress_struct dinfo;
 static struct jpeg_error_mgr jerr;
 
 
-
 /*
  * The User Interface parts 
  */
@@ -249,34 +248,13 @@ static void parse_commandline(int argc, char ** argv, parameters_t *param)
  * remember first filename for later
  * @returns 0 on success
  */
-static int init_parse_files(parameters_t *param, char *jpegname, FILE *jpegfile)
+static int init_parse_files(parameters_t *param, FILE *jpegfile)
 { 
   mjpeg_info("Parsing & checking input files.");
-  //FILE *jpegfile;
-
-  /*if (param->jpegformatstr) {
-       snprintf(jpegname, FILENAME_MAX, param->jpegformatstr, param->begin);
-       jpegfile = fopen(jpegname, "rb");
-  }
-  else {
-       char *p;
-       
-       p = fgets(jpegname, FILENAME_MAX, stdin);
-       if (p) {
-           strip(jpegname);
-           jpegfile = fopen(jpegname, "rb");
-       }
-       else {
-           jpegfile = NULL;
-       }
-  }*/
-  //jpegfile = stdin;
-
-  mjpeg_debug("Analyzing %s to get the right pic params", jpegname);
+  mjpeg_debug("Analyzing image to get the right pic params");
   
   if (jpegfile == NULL)
-    mjpeg_error_exit1("System error while opening: \"%s\": %s",
-		      jpegname, strerror(errno));
+    mjpeg_error_exit1("System error while opening: %s", strerror(errno));
 
   /* Now open this JPEG file, and examine its header to retrieve the 
      YUV4MPEG info that shall be written */
@@ -406,19 +384,36 @@ static ssize_t read_jpeg_data(uint8_t *jpegdata, char *jpegname, char *prev_jpeg
   return jpegsize;
 }
 
-static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg, uint8_t* jpegdata, ssize_t jpegsize)
+static int generate_YUV4MPEG(parameters_t *param)
 {
+  FILE* image_in;
+  ssize_t jpegsize;
   uint32_t frame;
-  //ssize_t jpegsize;
-  char jpegname[FILENAME_MAX];
-  char prev_jpegname[FILENAME_MAX];
   int loops;                                 /* number of loops to go */
-  uint8_t *yuv[3];  /* buffer for Y/U/V planes of decoded JPEG */
-  //static uint8_t jpegdata[MAXPIXELS];  /* that ought to be enough */
+  uint8_t* yuv[3];  /* buffer for Y/U/V planes of decoded JPEG */
+  static uint8_t jpegdata[MAXPIXELS];  /* that ought to be enough */
   y4m_stream_info_t streaminfo;
   y4m_frame_info_t frameinfo;
-  //jpegsize = 0;
+  jpegsize = 0;
   loops = param->loop;
+
+  image_in = tmpfile();
+
+  jpegsize = fread(jpegdata, sizeof(unsigned char), MAXPIXELS, stdin);
+  mjpeg_info("File size: %d", jpegsize);
+  if (jpegsize > 0) {
+    fwrite(jpegdata, sizeof(unsigned char), sizeof(jpegdata), image_in);
+    fseek(image_in, 0, SEEK_SET);
+  }
+  else {
+    mjpeg_error_exit1("Error reading from stdin...");
+  }
+
+  if (init_parse_files(param, image_in)) {
+      mjpeg_error_exit1("* Error processing the JPEG input.");
+  }
+
+  fclose(image_in);
 
   mjpeg_info("Number of Loops %i", loops);
   mjpeg_info("Number of Frames %i", param->numframes);
@@ -440,35 +435,10 @@ static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg, uint8_t* jpeg
 
   y4m_write_stream_header(STDOUT_FILENO, &streaminfo);
  
-  prev_jpegname[0] = 0;
   do {
      for (frame = param->begin;
           (frame < param->numframes + param->begin) || (param->numframes == -1);
           frame++) {
-   
-       /*if (param->jpegformatstr) {
-           snprintf(jpegname, sizeof(jpegname), param->jpegformatstr, frame);
-	 jpegsize = read_jpeg_data(jpegdata, jpegname, prev_jpegname);
-       }
-       else {
-           char *p;
-           
-           if (firstjpeg) {
-               p = firstjpeg;
-               sprintf(jpegname, firstjpeg);
-               firstjpeg = NULL;
-           }
-           else {
-               p = fgets(jpegname, FILENAME_MAX, stdin);
-           }
-           if (p) {
-               strip(jpegname);
-             jpegsize = read_jpeg_data(jpegdata, jpegname, prev_jpegname);
-           }
-           else {
-             jpegsize = -1;
-           }
-       }*/
        
       mjpeg_debug("Numframes %i  jpegsize %d", param->numframes, (int)jpegsize);
        if (jpegsize <= 0) {
@@ -502,8 +472,7 @@ static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg, uint8_t* jpeg
           */
    
          if ((param->interlace == Y4M_ILACE_NONE) || (param->interleave == 1)) {
-           mjpeg_info("Processing non-interlaced/interleaved %s, size %d", 
-                      jpegname, (int)jpegsize);
+           mjpeg_info("Processing non-interlaced/interleaved, size %d", (int)jpegsize);
 	   if (param->colorspace == JCS_GRAYSCALE)
 	       decode_jpeg_gray_raw(jpegdata, jpegsize,
 				    0, 420, param->width, param->height,
@@ -515,8 +484,7 @@ static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg, uint8_t* jpeg
          } else {
            switch (param->interlace) {
            case Y4M_ILACE_TOP_FIRST:
-             mjpeg_info("Processing interlaced, top-first %s, size %d",
-                        jpegname, (int)jpegsize);
+             mjpeg_info("Processing interlaced, top-first, size %d", (int)jpegsize);
 	     if (param->colorspace == JCS_GRAYSCALE)
 	       decode_jpeg_gray_raw(jpegdata, jpegsize,
 				    Y4M_ILACE_TOP_FIRST, 
@@ -529,8 +497,7 @@ static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg, uint8_t* jpeg
 			       yuv[0], yuv[1], yuv[2]);
              break;
            case Y4M_ILACE_BOTTOM_FIRST:
-             mjpeg_info("Processing interlaced, bottom-first %s, size %d", 
-                        jpegname, (int)jpegsize);
+             mjpeg_info("Processing interlaced, bottom-first, size %d", (int)jpegsize);
 	     if (param->colorspace == JCS_GRAYSCALE)
 	       decode_jpeg_gray_raw(jpegdata, jpegsize,
 				    Y4M_ILACE_BOTTOM_FIRST, 
@@ -580,40 +547,15 @@ static int generate_YUV4MPEG(parameters_t *param, char *firstjpeg, uint8_t* jpeg
  */
 int main(int argc, char ** argv)
 { 
-  FILE* image_in;
-  static uint8_t jpegdata[MAXPIXELS];
-  ssize_t jpegsize;
-
-  image_in = tmpfile();
-  jpegsize = fread(jpegdata, sizeof(unsigned char), MAXPIXELS, stdin);
-  mjpeg_info("File size: %d", jpegsize);
-  if (jpegsize > 0) {
-      fwrite(jpegdata, sizeof(unsigned char), sizeof(jpegdata), image_in);
-      fseek(image_in, 0, SEEK_SET);
-  }
-  else {
-      mjpeg_error_exit1("Error reading from stdin...");
-  }
-
   parameters_t param;
-  char first_jpegname[FILENAME_MAX];
-
-  //*first_jpegname = '\0';
-  strcpy(first_jpegname, "MISSING_FILENAME");
 
   parse_commandline(argc, argv, &param);
   mjpeg_default_handler_verbosity(param.verbose);
 
-  if (init_parse_files(&param, first_jpegname, image_in)) {
-    mjpeg_error_exit1("* Error processing the JPEG input.");
-  }
-  fclose(image_in);
-
-  if (generate_YUV4MPEG(&param, first_jpegname, jpegdata, jpegsize)) { 
+  if (generate_YUV4MPEG(&param)) { 
     mjpeg_error_exit1("* Error processing the input files.");
   }
 
   return 0;
-  // cat image.jpg | ../lavtools/jpeg2yuv -f 25 -I p
 }
 
