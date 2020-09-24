@@ -406,6 +406,9 @@ static ssize_t read_jpeg_from_stdin(uint8_t* jpegdata, read_parameters_t *read_p
     if (read_params->buff_size <= 0) {
         mjpeg_debug("Frame buffer is empty, reading from stdin...");
         read_size = fread(buffer, sizeof(unsigned char), MAXPIXELS, stdin);
+        if (read_size <= 0) {
+            return -1;
+        }
 
         if (buffer[0] == 0xFF && buffer[1] == 0xD8) {
             mjpeg_info("SOI found!!!");
@@ -484,10 +487,11 @@ static ssize_t read_jpeg_from_stdin(uint8_t* jpegdata, read_parameters_t *read_p
 static int generate_YUV4MPEG(parameters_t *param)
 {
   ssize_t jpegsize;
-  uint32_t frame;
-  int loops;                                 /* number of loops to go */
+  uint32_t frame = 1;
+  int loops;        /* number of loops to go */
   uint8_t* yuv[3];  /* buffer for Y/U/V planes of decoded JPEG */
   static uint8_t jpegdata[MAXPIXELS];  /* that ought to be enough */
+  uint8_t first_loop = 1;
   
   read_parameters_t *read_params = malloc(sizeof(read_parameters_t));
   read_params->buff_size = -1;
@@ -498,139 +502,112 @@ static int generate_YUV4MPEG(parameters_t *param)
   jpegsize = 0;
   loops = param->loop;
 
-  mjpeg_info("Reading first image");
-  jpegsize = read_jpeg_from_stdin(jpegdata, read_params);
-  if (jpegsize > 0) {
-      mjpeg_debug("Managed to read image from stdin...");
+  while (1) {
+
+    if (frame >= 100) {
+      break;
+    }
+
+
+    jpegsize = read_jpeg_from_stdin(jpegdata, read_params);
+    if (jpegsize <= 0) {
+      // should sleep 50ms(?)
+      usleep(50 * 1000);
+      continue;
+    }
+
+    if (first_loop) {
+      if (init_parse_files(param, jpegdata, jpegsize)) {
+        mjpeg_error_exit1("* Error processing the JPEG input.");
+      }
+
+      mjpeg_info("Now generating YUV4MPEG stream.");
+      y4m_init_stream_info(&streaminfo);
+      y4m_init_frame_info(&frameinfo);
+
+      y4m_si_set_width(&streaminfo, param->width);
+      y4m_si_set_height(&streaminfo, param->height);
+      y4m_si_set_interlace(&streaminfo, param->interlace);
+      y4m_si_set_framerate(&streaminfo, param->framerate);
+      y4m_si_set_sampleaspect(&streaminfo, param->aspect_ratio);
+
+      yuv[0] = malloc(param->width * param->height * sizeof(yuv[0][0]));
+      yuv[1] = malloc(param->width * param->height / 4 * sizeof(yuv[1][0]));
+      yuv[2] = malloc(param->width * param->height / 4 * sizeof(yuv[2][0]));
+
+      y4m_write_stream_header(STDOUT_FILENO, &streaminfo);
+
+      first_loop = 0;
+    }
+
+    /* decode_jpeg_raw:s parameters from 20010826
+    * jpeg_data:       buffer with input / output jpeg
+    * len:             Length of jpeg buffer
+    * itype:           0: Interleaved/Progressive
+    *                  1: Not-interleaved, Top field first
+    *                  2: Not-interleaved, Bottom field first
+    * ctype            Chroma format for decompression.
+    *                  Currently always 420 and hence ignored.
+    * raw0             buffer with input / output raw Y channel
+    * raw1             buffer with input / output raw U/Cb channel
+    * raw2             buffer with input / output raw V/Cr channel
+    * width            width of Y channel (width of U/V is width/2)
+    * height           height of Y channel (height of U/V is height/2)
+    */
+
+    if ((param->interlace == Y4M_ILACE_NONE) || (param->interleave == 1)) {
+      mjpeg_info("Processing non-interlaced/interleaved, size %d", (int)jpegsize);
+      if (param->colorspace == JCS_GRAYSCALE)
+          decode_jpeg_gray_raw(jpegdata, jpegsize,
+                               0, 420, param->width, param->height,
+                               yuv[0], yuv[1], yuv[2]);
+      else
+          decode_jpeg_raw(jpegdata, jpegsize,
+                          0, 420, param->width, param->height,
+                          yuv[0], yuv[1], yuv[2]);
+    }
+    else {
+      switch (param->interlace) {
+      case Y4M_ILACE_TOP_FIRST:
+        mjpeg_info("Processing interlaced, top-first, size %d", (int)jpegsize);
+        if (param->colorspace == JCS_GRAYSCALE)
+          decode_jpeg_gray_raw(jpegdata, jpegsize,
+                               Y4M_ILACE_TOP_FIRST,
+                               420, param->width, param->height,
+                               yuv[0], yuv[1], yuv[2]);
+        else
+          decode_jpeg_raw(jpegdata, jpegsize,
+                          Y4M_ILACE_TOP_FIRST,
+                          420, param->width, param->height,
+                          yuv[0], yuv[1], yuv[2]);
+        break;
+      case Y4M_ILACE_BOTTOM_FIRST:
+        mjpeg_info("Processing interlaced, bottom-first, size %d", (int)jpegsize);
+        if (param->colorspace == JCS_GRAYSCALE)
+          decode_jpeg_gray_raw(jpegdata, jpegsize,
+                               Y4M_ILACE_BOTTOM_FIRST,
+                               420, param->width, param->height,
+                               yuv[0], yuv[1], yuv[2]);
+        else
+          decode_jpeg_raw(jpegdata, jpegsize,
+                          Y4M_ILACE_BOTTOM_FIRST,
+                          420, param->width, param->height,
+                          yuv[0], yuv[1], yuv[2]);
+        break;
+      default:
+        mjpeg_error_exit1("FATAL logic error?!?");
+        break;
+      }
+    }
+
+    if (param->rescale_YUV) {
+      mjpeg_info("Rescaling color values.");
+      rescale_color_vals(param->width, param->height, yuv[0], yuv[1], yuv[2]);
+    }
+    mjpeg_debug("Frame decoded, now writing to output stream.");
+    y4m_write_frame(STDOUT_FILENO, &streaminfo, &frameinfo, yuv);
+    frame++;
   }
-  else {
-      mjpeg_error_exit1("Error reading from stdin...");
-  }
-
-  if (init_parse_files(param, jpegdata, jpegsize)) {
-      mjpeg_error_exit1("* Error processing the JPEG input.");
-  }
-
-  mjpeg_info("Number of Loops %i", loops);
-  mjpeg_info("Number of Frames %i", param->numframes);
-  mjpeg_info("Start at frame %i", param->begin);
-
-  mjpeg_info("Now generating YUV4MPEG stream.");
-  y4m_init_stream_info(&streaminfo);
-  y4m_init_frame_info(&frameinfo);
-
-  y4m_si_set_width(&streaminfo, param->width);
-  y4m_si_set_height(&streaminfo, param->height);
-  y4m_si_set_interlace(&streaminfo, param->interlace);
-  y4m_si_set_framerate(&streaminfo, param->framerate);
-  y4m_si_set_sampleaspect(&streaminfo, param->aspect_ratio);
-
-  yuv[0] = malloc(param->width * param->height * sizeof(yuv[0][0]));
-  yuv[1] = malloc(param->width * param->height / 4 * sizeof(yuv[1][0]));
-  yuv[2] = malloc(param->width * param->height / 4 * sizeof(yuv[2][0]));
-
-  y4m_write_stream_header(STDOUT_FILENO, &streaminfo);
- 
-
-  param->numframes = 5;
-  do {
-     for (frame = param->begin;
-          (frame < param->numframes + param->begin) || (param->numframes == -1);
-          frame++) {
-       
-       if (frame > param->begin) {
-         jpegsize = read_jpeg_from_stdin(jpegdata, read_params);
-       }
-
-       mjpeg_debug("Numframes %i  jpegsize %d", param->numframes, (int)jpegsize);
-       if (jpegsize <= 0) {
-         mjpeg_info("jpeg size %d...", jpegsize);
-         mjpeg_debug("in jpegsize <= 0"); 
-         if (param->numframes == -1)
-            {
-            mjpeg_info("No more frames.  Stopping.");
-            break;  /* we are done; leave 'while' loop */
-            }
-         else
-            mjpeg_info("Rewriting latest frame instead.");
-       }
-         
-       if (jpegsize > 0) {
-         mjpeg_debug("Preparing frame");
-         
-         /* decode_jpeg_raw:s parameters from 20010826
-          * jpeg_data:       buffer with input / output jpeg
-          * len:             Length of jpeg buffer
-          * itype:           0: Interleaved/Progressive
-          *                  1: Not-interleaved, Top field first
-          *                  2: Not-interleaved, Bottom field first
-          * ctype            Chroma format for decompression.
-          *                  Currently always 420 and hence ignored.
-          * raw0             buffer with input / output raw Y channel
-          * raw1             buffer with input / output raw U/Cb channel
-          * raw2             buffer with input / output raw V/Cr channel
-          * width            width of Y channel (width of U/V is width/2)
-          * height           height of Y channel (height of U/V is height/2)
-          */
-   
-         if ((param->interlace == Y4M_ILACE_NONE) || (param->interleave == 1)) {
-           mjpeg_info("Processing non-interlaced/interleaved, size %d", (int)jpegsize);
-	   if (param->colorspace == JCS_GRAYSCALE)
-	       decode_jpeg_gray_raw(jpegdata, jpegsize,
-				    0, 420, param->width, param->height,
-				    yuv[0], yuv[1], yuv[2]);
-	   else
-	     decode_jpeg_raw(jpegdata, jpegsize,
-			     0, 420, param->width, param->height,
-			     yuv[0], yuv[1], yuv[2]);
-         } else {
-           switch (param->interlace) {
-           case Y4M_ILACE_TOP_FIRST:
-             mjpeg_info("Processing interlaced, top-first, size %d", (int)jpegsize);
-	     if (param->colorspace == JCS_GRAYSCALE)
-	       decode_jpeg_gray_raw(jpegdata, jpegsize,
-				    Y4M_ILACE_TOP_FIRST, 
-				    420, param->width, param->height,
-				    yuv[0], yuv[1], yuv[2]);
-	     else
-	       decode_jpeg_raw(jpegdata, jpegsize,
-			       Y4M_ILACE_TOP_FIRST,
-			       420, param->width, param->height,
-			       yuv[0], yuv[1], yuv[2]);
-             break;
-           case Y4M_ILACE_BOTTOM_FIRST:
-             mjpeg_info("Processing interlaced, bottom-first, size %d", (int)jpegsize);
-	     if (param->colorspace == JCS_GRAYSCALE)
-	       decode_jpeg_gray_raw(jpegdata, jpegsize,
-				    Y4M_ILACE_BOTTOM_FIRST, 
-				    420, param->width, param->height,
-				    yuv[0], yuv[1], yuv[2]);
-	     else
-	       decode_jpeg_raw(jpegdata, jpegsize,
-			       Y4M_ILACE_BOTTOM_FIRST,
-			       420, param->width, param->height,
-			       yuv[0], yuv[1], yuv[2]);
-             break;
-           default:
-             mjpeg_error_exit1("FATAL logic error?!?");
-             break;
-           }
-         }
-
-	 if (param->rescale_YUV)
-	   {
-	     mjpeg_info("Rescaling color values.");
-	     rescale_color_vals(param->width, param->height, yuv[0], yuv[1], yuv[2]);
-	   }
-	 mjpeg_debug("Frame decoded, now writing to output stream.");
-       }
-   
-       y4m_write_frame(STDOUT_FILENO, &streaminfo, &frameinfo, yuv);
-     }
-     if (param->loop != -1)
-       loops--;
- 
-  } while( loops >=1 || loops == -1 );
   
   y4m_fini_stream_info(&streaminfo);
   y4m_fini_frame_info(&frameinfo);
