@@ -409,7 +409,8 @@ static ssize_t read_from_stdin(read_parameters_t* read_params) {
         read_size = fread(buffer, sizeof(unsigned char), BUFFERSIZE, stdin);
         mjpeg_debug("Read size: %d", read_size);
         if (read_size <= 0) {
-            mjpeg_error_exit1("Failed to read from STDIN!");
+            mjpeg_debug("Failed to read from STDIN! Size: %d", read_size);
+            return read_size;
         }
         eoi_index = find_eoi_in_buffer(buffer, read_size);
 
@@ -428,6 +429,9 @@ static ssize_t read_jpeg_from_stdin(uint8_t* jpegdata, read_parameters_t *read_p
         // Frame buffer is empty, or partial image is available in the buffer
         image_size = read_from_stdin(read_params);
         mjpeg_debug("Image size: %d", image_size);
+        if (image_size <= 0) {
+            return image_size;
+        }
 
         memcpy(jpegdata, read_params->frame_buff, image_size * sizeof(unsigned char));
         if (read_params->buff_size - image_size != 0) {
@@ -480,13 +484,10 @@ static int generate_YUV4MPEG(parameters_t *param)
 
   while (1) {
 
-    if (frame >= 100) {
-      break;
-    }
-
     jpegsize = read_jpeg_from_stdin(jpegdata, read_params);
     if (jpegsize <= 0) {
-      // should sleep 50ms(?)
+      // sleep 50ms (or how long?)
+      mjpeg_debug("No data, sleeping, buffer size: %d", read_params->buff_size);
       usleep(50 * 1000);
       continue;
     }
