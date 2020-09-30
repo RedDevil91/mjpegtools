@@ -529,11 +529,11 @@ static unsigned char* base64_decode(const char* data, size_t input_length, size_
 
 static int generate_YUV4MPEG(parameters_t *param)
 {
-  ssize_t jpegsize;
+  size_t jpegsize;
   uint32_t frame = 1;
   int loops;        /* number of loops to go */
   uint8_t* yuv[3];  /* buffer for Y/U/V planes of decoded JPEG */
-  static uint8_t jpegdata[MAXPIXELS];  /* that ought to be enough */
+  static uint8_t * jpegdata;  /* that ought to be enough */
   uint8_t first_loop = 1;
   
   read_parameters_t *read_params = malloc(sizeof(read_parameters_t));
@@ -545,27 +545,19 @@ static int generate_YUV4MPEG(parameters_t *param)
   jpegsize = 0;
   loops = param->loop;
 
-  char* test = "VGVzdCBpbnB1dCBlbmNvZGUgZm9yIGJhc2U2NA==";
-  size_t input_len = 40;
-  size_t output_len = 0;
-
-  uint8_t* buffer = base64_decode(test, input_len, &output_len);
-  mjpeg_info("Output length: %d", output_len);
-  for (int i = 0; i < output_len; i++) {
-      mjpeg_info("%c", buffer[i]);
-  }
-  base64_cleanup();
-
+  char* line_buf;
+  size_t line_buf_size = 0;
 
   while (1) {
 
-    jpegsize = read_jpeg_from_stdin(jpegdata, read_params);
-    if (jpegsize <= 0) {
+    if (getline(&line_buf, &line_buf_size, stdin) == -1) {
       // sleep 50ms (or how long?)
-      mjpeg_debug("No data, sleeping, buffer size: %d", read_params->buff_size);
+      //mjpeg_debug("No data, sleeping, buffer size: %d", lin_buf_size);
       usleep(50 * 1000);
       continue;
     }
+
+    jpegdata = (uint8_t*) base64_decode(line_buf, line_buf_size, &jpegsize);
 
     if (first_loop) {
       if (init_parse_files(param, jpegdata, jpegsize)) {
@@ -667,6 +659,7 @@ static int generate_YUV4MPEG(parameters_t *param)
   free(yuv[2]);
   free(read_params->frame_buff);
   free(read_params);
+  base64_cleanup();
 
   return 0;
 }
